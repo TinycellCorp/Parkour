@@ -19,7 +19,7 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
-    "@TinycellCorp/hi5-sdk": "^1.8.24",
+    "@tinycellcorp/hi5-sdk": "npm:@TinycellCorp/hi5-sdk@^1.13.0",
     "progress": "^2.0.3",
     "typings": "^2.1.1"
   }

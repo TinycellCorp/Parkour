@@ -1,13 +1,13 @@
 /**
- * 카카오 SDK 헬퍼 (CC 2.4.13, vendored hi5-sdk 1.6.13).
+ * 카카오 SDK 헬퍼 (CC 2.4.13, npm @tinycellcorp/hi5-sdk 1.13.0).
  *
  * Parkour(49FriendRunner)는 기존에 framework/Hi5/Hi5.ts(커스텀 postMessage 브릿지)로
  * hi5games 플랫폼과 통신한다. package.json 의 @TinycellCorp/hi5-sdk 의존성은 실제로는
  * 사용되지 않았다(커스텀 브릿지가 모든 SDK 호출을 대체). 카카오 플랫폼은 KakaoAdapter(`/platform`
  * 엔트리)가 필수인데, CC2 빌더는 import 한 곳이 없으면 platform 을 번들에서 누락시킨다.
- * 따라서 카카오 동작(광고/랭킹)을 위해 vendored hi5-sdk(.js)/hi5-sdk-platform(.js)을 require 한다.
+ * 따라서 카카오 동작(광고/랭킹)을 위해 npm @tinycellcorp/hi5-sdk 와 /platform 을 명시적으로 require 한다.
  *
- * ⚠ 로드 순서: regenerator-runtime → hi5-sdk(index) → (lazy) hi5-sdk-platform.
+ * ⚠ 로드 순서: regenerator-runtime → hi5-sdk(index) → (lazy) hi5-sdk/platform.
  *   platform.js 는 module-load 시 new _Hi5SDK() 로 window.parent 에 접근하므로
  *   top-level require 금지(에디터/비-kakao 로드 시 씬 깨짐). 런타임 kakao 호스트에서만 lazy require.
  *
@@ -20,7 +20,7 @@
  */
 
 require("../Hi5Helper_2x/regenerator-runtime");
-var sdk = require("../Hi5Helper_2x/hi5-sdk");
+var sdk = require("@tinycellcorp/hi5-sdk");
 var adDiag = require("../ad-diag");
 
 // === 카카오 어드민 발급값 ===
@@ -129,7 +129,7 @@ function ensureInit() {
     // platform.js 는 여기서만 lazy require (런타임 kakao 호스트).
     var KakaoAdapter = null;
     try {
-        KakaoAdapter = require("../Hi5Helper_2x/hi5-sdk-platform").KakaoAdapter;
+        KakaoAdapter = require("@tinycellcorp/hi5-sdk/platform").KakaoAdapter;
     } catch (e) {
         console.warn("[KakaoSDK] hi5-sdk-platform require 실패:", e);
         return Promise.resolve(false);
