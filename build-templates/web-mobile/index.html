@@ -15,13 +15,22 @@
         if (typeof Storage === 'undefined' || !window.localStorage) return;
 
         var PATTERNS = window.__KCB_PATTERNS || [/^kakao\./];
+        var PACK = window.__KCB_PACK || /^(.+)\.level(\d+)$/;
+        var PACK_SUFFIX = '.levels';
         var NS = 'kcb.';            // 쿠키명 prefix (키에 h5Id 포함이라 게임 간 이름 충돌 없음)
         var MAX_COOKIE = 3800;      // name+value 인코딩 후 바이트 가드 (4KB 한도)
+        // JS 로 못 보는 플랫폼 쿠키(HttpOnly)도 같은 헤더에 실리므로 CDN 한도(약 10.2KB)보다 넉넉히 낮춘다
+        var MAX_TOTAL = 6000;
         var MAX_AGE = 31536000;     // 1년 (매 기록마다 갱신)
+        // ⚠ 따옴표로 감싼 단독 "/" 와 "." 을 코드에 그대로 두지 말 것.
+        //   Cocos 빌드(md5Cache 로 entry 파일명이 index.<hash>.js 가 되는 구성)가 이걸
+        //   모듈 specifier 로 오인해서 entry 자산명을 끼워넣는다 → 이 <script> 전체가 SyntaxError.
+        //   (116SpaceVaves 에서 2026-07-10 빌드부터 실제 발생) → \x2F 이스케이프로 회피.
+        var SLASH = "\x2F";
         var PATH = (function () {
-            var p = location.pathname || '/';
-            var i = p.lastIndexOf('/');
-            return i >= 0 ? p.slice(0, i + 1) : '/';
+            var p = location.pathname || SLASH;
+            var i = p.lastIndexOf(SLASH);
+            return i >= 0 ? p.slice(0, i + 1) : SLASH;
         })();
         var lastWritten = {};
 
@@ -29,45 +38,161 @@
             for (var i = 0; i < PATTERNS.length; i++) { if (PATTERNS[i].test(key)) return true; }
             return false;
         }
-        function cname(key) { return NS + encodeURIComponent(key); }
-        function writeCookie(key, raw) {
-            if (lastWritten[key] === raw) return;
-            var n = cname(key), v = encodeURIComponent(raw);
-            if (n.length + v.length > MAX_COOKIE) {
-                // 쿠키우선 읽기에서 구버전 쿠키가 최신 localStorage 를 가리면 안 됨 → 기존 쿠키 삭제
-                deleteCookie(key);
-                if (typeof console !== 'undefined' && console.warn) console.warn('[kcb] 쿠키 한도 초과로 스킵(기존 쿠키 삭제):', key, n.length + v.length + 'B');
-                return;
-            }
-            document.cookie = n + '=' + v + '; path=' + PATH + '; max-age=' + MAX_AGE + '; SameSite=Lax';
-            lastWritten[key] = raw;
+        function packOf(key) {
+            var m = PACK.exec(key);
+            return m ? { group: m[1] + PACK_SUFFIX, idx: m[2] } : null;
         }
-        function deleteCookie(key) {
-            document.cookie = cname(key) + '=; path=' + PATH + '; max-age=0; SameSite=Lax';
-            delete lastWritten[key];
+        function warn(a, b) { if (typeof console !== 'undefined' && console.warn) console.warn('[kcb] ' + a, b || ''); }
+        function cname(key) { return NS + encodeURIComponent(key); }
+        function cookieList() {
+            var out = [], parts = (document.cookie || '').split('; ');
+            for (var i = 0; i < parts.length; i++) {
+                var eq = parts[i].indexOf('=');
+                if (eq > 0) out.push([parts[i].slice(0, eq), parts[i].slice(eq + 1)]);
+            }
+            return out;
+        }
+        // v3.1: 현재 계정 외 같은 게임(h5Id)의 계정별 쿠키를 지운다 — 계정당 1회
+        var SCOPED = /^kakao\.([^.]+)\.([^.]+)\./, prunedFor = {};
+        function pruneOtherPlayers(key) {
+            var m = SCOPED.exec(key);
+            if (!m || m[2] === 'anon') return;
+            var mine = m[1] + ':' + m[2];
+            if (prunedFor[mine]) return;
+            prunedFor[mine] = true;
+            var list = cookieList(), n = 0;
+            for (var i = 0; i < list.length; i++) {
+                if (list[i][0].indexOf(NS) !== 0) continue;
+                try {
+                    var o = SCOPED.exec(decodeURIComponent(list[i][0].slice(NS.length)));
+                    if (o && o[1] === m[1] && o[2] !== m[2]) { deleteRawCookie(list[i][0]); n++; }
+                } catch (e) { }
+            }
+            if (n) warn('다른 계정 쿠키 정리:', n + '개');
+        }
+        function setRawCookie(name, value) {
+            document.cookie = name + '=' + value + '; path=' + PATH + '; max-age=' + MAX_AGE + '; SameSite=Lax';
+        }
+        function deleteRawCookie(name) {
+            document.cookie = name + '=; path=' + PATH + '; max-age=0; SameSite=Lax';
         }
         function readCookie(key) {
-            var n = cname(key) + '=';
-            var parts = (document.cookie || '').split('; ');
-            for (var i = 0; i < parts.length; i++) {
-                if (parts[i].indexOf(n) === 0) {
-                    try { return decodeURIComponent(parts[i].slice(n.length)); } catch (e) { return null; }
+            var n = cname(key), list = cookieList();
+            for (var i = 0; i < list.length; i++) {
+                if (list[i][0] === n) {
+                    try { return decodeURIComponent(list[i][1]); } catch (e) { return null; }
                 }
             }
             return null;
         }
+        function deleteCookie(key) {
+            deleteRawCookie(cname(key));
+            delete lastWritten[key];
+        }
+        function writeCookie(key, raw) {
+            if (lastWritten[key] === raw) return true;
+            var n = cname(key), v = encodeURIComponent(raw);
+            if (n.length + v.length > MAX_COOKIE) {
+                // 쿠키우선 읽기에서 구버전 쿠키가 최신 localStorage 를 가리면 안 됨 → 기존 쿠키 삭제
+                deleteCookie(key);
+                warn('쿠키 한도 초과로 스킵(기존 쿠키 삭제):', key + ' ' + (n.length + v.length) + 'B');
+                return false;
+            }
+            // 총량 초과면 새 키는 쿠키에 안 쓴다. 이미 있는 키의 값 갱신은 크기가 거의 같으므로 허용(쿠키 우선 읽기라 막으면 stale)
+            if (readCookie(key) === null && (document.cookie || '').length + n.length + v.length + 3 > MAX_TOTAL) {
+                warn('쿠키 총량 초과로 스킵:', key);
+                return false;
+            }
+            setRawCookie(n, v);
+            lastWritten[key] = raw;
+            return true;
+        }
+
+        // ── 합친 쿠키: 값 = "번호:인코딩값|번호:인코딩값" (':' '|' 는 encodeURIComponent 가 이스케이프하므로 구분자로 안전)
+        function readPack(group) {
+            var map = {}, raw = null, n = cname(group), list = cookieList();
+            for (var i = 0; i < list.length; i++) { if (list[i][0] === n) { raw = list[i][1]; break; } }
+            if (raw) {
+                var items = raw.split('|');
+                for (var j = 0; j < items.length; j++) {
+                    var c = items[j].indexOf(':');
+                    if (c > 0) { try { map[items[j].slice(0, c)] = decodeURIComponent(items[j].slice(c + 1)); } catch (e) { } }
+                }
+            }
+            return map;
+        }
+        function writePack(group, map) {
+            var items = [];
+            for (var k in map) { if (Object.prototype.hasOwnProperty.call(map, k)) items.push(k + ':' + encodeURIComponent(map[k])); }
+            var n = cname(group), v = items.join('|');
+            if (!items.length) { deleteRawCookie(n); return true; }
+            if (n.length + v.length > MAX_COOKIE) return false;
+            setRawCookie(n, v);
+            return true;
+        }
+        function packSet(p, value) {
+            var map = readPack(p.group);
+            if (map[p.idx] === value) return;
+            map[p.idx] = value;
+            if (!writePack(p.group, map)) {
+                // 다 못 담으면 이 항목을 빼서 쿠키 우선 읽기가 낡은 값을 돌려주지 않게 한다 (localStorage 폴백)
+                delete map[p.idx];
+                writePack(p.group, map);
+                warn('합친 쿠키 한도 초과로 스킵:', p.group + ' #' + p.idx);
+            }
+        }
+        function packRemove(p) {
+            var map = readPack(p.group);
+            if (!(p.idx in map)) return;
+            delete map[p.idx];
+            writePack(p.group, map);
+        }
+
+        // 구버전이 남긴 레벨별 쿠키 → 합친 쿠키로 이전. 다시 읽어 값이 확인된 것만 지운다.
+        (function migrate() {
+            var list = cookieList(), groups = {};
+            for (var i = 0; i < list.length; i++) {
+                if (list[i][0].indexOf(NS) !== 0) continue;
+                try {
+                    var key = decodeURIComponent(list[i][0].slice(NS.length));
+                    var p = packOf(key);
+                    if (!p || !matches(key)) continue;
+                    (groups[p.group] = groups[p.group] || []).push({ idx: p.idx, name: list[i][0], value: decodeURIComponent(list[i][1]) });
+                } catch (e) { }
+            }
+            for (var g in groups) {
+                if (!Object.prototype.hasOwnProperty.call(groups, g)) continue;
+                var map = readPack(g), olds = groups[g];
+                // 합친 쿠키에 이미 있는 값이 더 최신(v3 이후 기록)이므로 비어 있는 번호만 채운다
+                for (var j = 0; j < olds.length; j++) { if (!(olds[j].idx in map)) map[olds[j].idx] = olds[j].value; }
+                if (!writePack(g, map)) { warn('레벨 쿠키 이전 실패(한도 초과) — 기존 쿠키 유지:', g); continue; }
+                var check = readPack(g);
+                for (var k = 0; k < olds.length; k++) {
+                    if (check[olds[k].idx] === map[olds[k].idx]) deleteRawCookie(olds[k].name);
+                }
+            }
+        })();
 
         var proto = Storage.prototype;
         var origSet = proto.setItem, origGet = proto.getItem, origRemove = proto.removeItem;
+
         proto.setItem = function (key, value) {
             origSet.apply(this, arguments);
-            try { if (this === window.localStorage && matches(String(key))) writeCookie(String(key), String(value)); } catch (e) { }
+            try {
+                if (this === window.localStorage && matches(String(key))) {
+                    pruneOtherPlayers(String(key));
+                    var p = packOf(String(key));
+                    if (p) packSet(p, String(value)); else writeCookie(String(key), String(value));
+                }
+            } catch (e) { }
         };
         proto.getItem = function (key) {
             // 쿠키 우선: 대상 키는 쿠키 값이 있으면 그걸 정본으로 반환(+localStorage 재수화)
             try {
                 if (this === window.localStorage && matches(String(key))) {
-                    var c = readCookie(String(key));
+                    var p = packOf(String(key)), c;
+                    if (p) { var m = readPack(p.group); c = (p.idx in m) ? m[p.idx] : null; }
+                    else c = readCookie(String(key));
                     if (c !== null) {
                         if (origGet.apply(this, arguments) !== c) origSet.call(this, key, c);
                         return c;
@@ -78,20 +203,25 @@
         };
         proto.removeItem = function (key) {
             origRemove.apply(this, arguments);
-            try { if (this === window.localStorage && matches(String(key))) deleteCookie(String(key)); } catch (e) { }
+            try {
+                if (this === window.localStorage && matches(String(key))) {
+                    var p = packOf(String(key));
+                    if (p) packRemove(p); else deleteCookie(String(key));
+                }
+            } catch (e) { }
         };
 
         // QA/치트 확인용 (logOverlay 등에서 window.__kakaoCookieBackup.dump() 호출)
         window.__kakaoCookieBackup = {
-            version: 2,   // v2 = 쿠키 우선 읽기
+            version: 3.1, // v3 = 쿠키 우선 읽기 + 레벨별 키 합치기 + 총량 제한, v3.1 = 다른 계정 쿠키 정리
             path: PATH,
             read: readCookie,
+            readPack: readPack,
             dump: function () {
-                var out = {}, parts = (document.cookie || '').split('; ');
-                for (var i = 0; i < parts.length; i++) {
-                    if (parts[i].indexOf(NS) === 0) {
-                        var eq = parts[i].indexOf('=');
-                        out[decodeURIComponent(parts[i].slice(NS.length, eq))] = parts[i].length - eq - 1;
+                var out = {}, list = cookieList();
+                for (var i = 0; i < list.length; i++) {
+                    if (list[i][0].indexOf(NS) === 0) {
+                        try { out[decodeURIComponent(list[i][0].slice(NS.length))] = list[i][1].length; } catch (e) { }
                     }
                 }
                 return out;   // {키: 저장바이트}
