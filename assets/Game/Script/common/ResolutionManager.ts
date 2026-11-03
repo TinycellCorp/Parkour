@@ -92,20 +92,35 @@ export default class ResolutionManager {
     }
 
     /**
-     * Canvas에 반응형 설정 적용
-     * SHOW_ALL 전략: fitWidth=true, fitHeight=true
+     * Canvas에 반응형 설정 적용 — 인게임(Game._applyAdaptiveResolution)과 같은 적응형.
+     * 디자인보다 가로로 넓으면 높이고정, 아니면 기존 SHOW_ALL 유지(4:3 에서 너비고정+cover 는 로고가 잘림). SHOW_ALL 은 와이드 폰에서
+     * 좌우 검은 띠를 만들어 카카오 풀 화면 대응에 걸린다(릴레이 #130 접속 로딩).
+     * 배경은 늘리지 않고 비율 유지로 화면을 덮는다(coverBackground).
      */
     static applyToCanvas(canvas: cc.Canvas): void {
         if (!canvas) {
             console.warn('[ResolutionManager] Canvas가 null입니다.');
             return;
         }
-
-        // SHOW_ALL 전략 적용
-        canvas.fitWidth = true;
+        const design = canvas.designResolution;
+        const frame = cc.view.getFrameSize();
+        const wide = frame.width / frame.height >= design.width / design.height;
         canvas.fitHeight = true;
+        canvas.fitWidth = !wide;
+        console.log(`[ResolutionManager] Canvas 설정 적용: ${wide ? 'FIXED_HEIGHT' : 'SHOW_ALL'}`);
+    }
 
-        console.log(`[ResolutionManager] Canvas 설정 적용: fitWidth=true, fitHeight=true`);
+    /** 배경 노드를 Widget 늘이기 대신 비율 유지 cover 스케일로 화면 전체에 맞춘다. */
+    static coverBackground(node: cc.Node, designW: number, designH: number): void {
+        if (!node) return;
+        const fr = cc.view.getFrameSize();
+        if (fr.width / fr.height < designW / designH) return; // 좁은 화면은 SHOW_ALL 그대로(Widget 유지)
+        const w = node.getComponent(cc.Widget);
+        if (w) w.enabled = false;
+        const vs = cc.view.getVisibleSize();
+        node.setContentSize(designW, designH);
+        node.setPosition(0, 0);
+        node.scale = Math.max(vs.width / designW, vs.height / designH);
     }
 
     /**

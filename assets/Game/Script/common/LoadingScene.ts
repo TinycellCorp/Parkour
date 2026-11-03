@@ -203,6 +203,7 @@ export default class LoadingScene extends LoadingSceneBase {
         // 해상도 관리자 초기화
         ResolutionManager.init();
         ResolutionManager.applyToCurrentScene();
+        ResolutionManager.coverBackground(cc.find('Canvas/loading_background'), 1334, 750);
         console.log("[ResolutionManager] " + ResolutionManager.getDebugInfo());
 
         // Hi5 SDK 초기화
