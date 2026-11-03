@@ -91,6 +91,9 @@
         }
         function writeCookie(key, raw) {
             if (lastWritten[key] === raw) return true;
+            // v3.2: 값이 정확히 null 인 쿠키 뒤에 다른 쿠키가 오면("x=null; y=...") 카카오 WAF 가 SQL 주입으로 보고 403.
+            //   null 은 쿠키로 남기지 않는다(읽기는 쿠키 없으면 localStorage 로 폴백하므로 값은 그대로).
+            if (raw === 'null') { deleteCookie(key); return true; }
             var n = cname(key), v = encodeURIComponent(raw);
             if (n.length + v.length > MAX_COOKIE) {
                 // 쿠키우선 읽기에서 구버전 쿠키가 최신 localStorage 를 가리면 안 됨 → 기존 쿠키 삭제
@@ -211,9 +214,18 @@
             } catch (e) { }
         };
 
+        // v3.2: 이전 버전이 남긴 null 값 쿠키 정리(WAF 403 유발) — localStorage 값은 그대로 둔다
+        try {
+            var boot = cookieList(), nulls = 0;
+            for (var bi = 0; bi < boot.length; bi++) {
+                if (boot[bi][0].indexOf(NS) === 0 && boot[bi][1] === 'null') { deleteRawCookie(boot[bi][0]); nulls++; }
+            }
+            if (nulls) warn('null 쿠키 정리:', nulls + '개');
+        } catch (e) { }
+
         // QA/치트 확인용 (logOverlay 등에서 window.__kakaoCookieBackup.dump() 호출)
         window.__kakaoCookieBackup = {
-            version: 3.1, // v3 = 쿠키 우선 읽기 + 레벨별 키 합치기 + 총량 제한, v3.1 = 다른 계정 쿠키 정리
+            version: 3.2, // v3 = 쿠키 우선 읽기 + 레벨별 키 합치기 + 총량 제한, v3.1 = 다른 계정 쿠키 정리, v3.2 = null 값 쿠키 금지(WAF 403)
             path: PATH,
             read: readCookie,
             readPack: readPack,
