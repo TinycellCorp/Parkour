@@ -31,7 +31,7 @@ export default class UIDrawBox extends mvcView {
     private isOnDraw: boolean = false;
     onLoad() {
         this.rewardData = csv.drawBox.values;
-        this.register(this.numLabel, () => UInfo.drawResidueTime);
+        this.register(this.numLabel, () => Math.max(0, UInfo.drawResidueTime));
         this.onVisible(this.hintNode, () => {
             return UInfo.drawResidueTime <= 4 ? true : false;
         });
@@ -115,12 +115,11 @@ export default class UIDrawBox extends mvcView {
             // Toast.make("正在挑选奖品！")
             return;
         }
-        // [임시 비활성화] 상자뽑기 횟수제한
-        // if (UInfo.drawResidueTime <= 0) {
-        //     Toast.make(LocalizationManager.getText("@text.draw_time_used_up"));
-        //     // Toast.make("当日抽奖次数已用完！");
-        //     return;
-        // }
+        // 상자뽑기 하루 5회 제한 (릴레이 #133: 꺼져 있어 횟수가 마이너스로 내려가며 다이아로 계속 뽑혔음)
+        if (UInfo.drawResidueTime <= 0) {
+            Toast.make(LocalizationManager.getText("@text.draw_time_used_up"));
+            return;
+        }
         if (UInfo.drawResidueTime <= 4) {
             if (pdata.diamond < 5) {
                 Toast.make(LocalizationManager.getText("@text.diamond_not_enough"));

@@ -174,6 +174,8 @@ export default class GuiderLayer extends cc.Component {
     hideFocus() {
         // this.pointer.active = false;
         this.focusArea.x = -1000;
+        // 카카오 가로 풀 화면(2.4:1 등)에선 x=-1000 이 화면 안이라 손가락이 왼쪽 끝에 남는다 → 손가락도 숨김
+        if (this.finger) this.finger.active = false;
         this.maskbg.getComponent(cc.Widget).updateAlignment();
         this.motionStreak && this.motionStreak.reset();
     }
