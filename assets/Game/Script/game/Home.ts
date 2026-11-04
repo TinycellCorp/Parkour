@@ -67,8 +67,11 @@ export default class Home extends mvcView {
         //等级大于3级解锁无尽模式
         this.onVisible(this.node_loc, _ => pdata.playerlv < csv.Config.Unlock_Endless)
         //
+        // 선물 레드닷: 무료 뽑기(하루 첫 1회 = drawResidueTime 5)가 남았을 때만.
+        //   2회차부터는 다이아 5개가 드는 유료 뽑기라 "받을 선물 있음" 이 아니다(CBT 지적: 뽑을 선물 없는데 레드닷).
+        //   UIDrawBox.onBoxTouchEnd 의 유료 판정(drawResidueTime <= 4)과 같은 기준.
         this.onVisible(this.drawBoxPoint, () => {
-            return UInfo.drawResidueTime > 0;
+            return UInfo.drawResidueTime > 4;
         })
         this.updateHeroSpine();
         evt.on("pdata.selHero", this.updateHeroSpine, this);
