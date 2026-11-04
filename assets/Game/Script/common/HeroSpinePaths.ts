@@ -14,6 +14,15 @@ export const heroSpinePaths: { [id: string]: string } = {
 };
 
 /**
+ * 인게임 캐릭터 크기 보정(춘식이 = 1). 영웅마다 스파인 원본 크기가 달라(라이언 높이 춘식이의 약 1.3배)
+ * 같은 배율이면 큰 영웅으로 이어하기(부활) 시 캐릭터가 커 보인다(릴레이 #133).
+ * 로비·부활창(heroItem/UIReviveItem heroScales, 춘식이 0.6 기준)과 같은 비율.
+ */
+export const heroInGameScale: { [id: string]: number } = {
+    "1": 1, "2": 0.5 / 0.6, "3": 1, "4": 1, "5": 0.55 / 0.6, "6": 0.45 / 0.6, "7": 0.55 / 0.6, "8": 1,
+};
+
+/**
  * 영웅 ID로 스파인 경로 가져오기
  */
 export function getHeroSpinePath(heroId: string): string | undefined {

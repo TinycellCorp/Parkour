@@ -12,7 +12,7 @@ import ccUtil from "../../../framework/utils/ccUtil";
 import { LocalizationManager } from "../../../framework/Hi5/Localization/LocalizationManager";
 import SkeletonComponent from "../Controller/SkeletonComponent";
 import { ParkourType, pdata } from "../data/PlayerInfo";
-import { heroSpinePaths } from "../common/HeroSpinePaths";
+import { heroSpinePaths, heroInGameScale } from "../common/HeroSpinePaths";
 import Falloff from "./behaviors/Falloff";
 import PlayerDeadDetector from "./behaviors/player/logic/PlayerDeadDetector";
 import Game, { root } from "./Game";
@@ -206,7 +206,11 @@ export default class Player extends cc.Component implements FizzCollideInterface
     }
 
     /**set skeleton from template */
+    /** 영웅별 크기 보정(heroInGameScale). setNormalSize/setDoubleSize 목표 배율에 곱한다 */
+    private heroScale: number = 1;
+
     async setSkeleton(prefabPath, heroId: string) {
+        this.heroScale = heroInGameScale[heroId] || 1;
         let res = await ccUtil.getRes(prefabPath, cc.Prefab)
         let node = LocalizationManager.instantiatePrefab(res as unknown as cc.Prefab);
         if (node == null) return;
@@ -222,6 +226,8 @@ export default class Player extends cc.Component implements FizzCollideInterface
         }
         this.node.setContentSize(node.getContentSize())
         this.setNormalSize();
+        // 영웅 프리팹 기본 배율(0.327)을 그대로 쓰면 원본이 큰 영웅(라이언·튜브 등)이 커 보인다 → 바로 보정
+        this.skeleton.node.scale = 0.327 * this.heroScale;
 
         // 카카오 스파인 데이터로 교체
         const kakaoSpinePath = heroSpinePaths[heroId];
@@ -249,11 +255,10 @@ export default class Player extends cc.Component implements FizzCollideInterface
                     } catch (e) {
                         sk.setAnimation(0, "Idle", true);
                     }
-                    // 튜브 영웅(ID 6)일 때 스파인 스케일 0.8배
-                    if (heroId === "6") {
-                        this.skeleton.node.scale = 0.8;
-                    } else {
-                        this.skeleton.node.scale = 1.0;
+                    // (구) 여기서 scale 을 1.0/0.8 로 덮었는데, 로딩이 늦어 축소 연출(0.5초)이 끝난 뒤 도착하면
+                    // 캐릭터가 약 3배로 남았다. 크기는 setNormalSize/setDoubleSize 가 정하므로 현재 목표로 맞춘다.
+                    if (!this.fsm.isInState(State.Scaling)) {
+                        this.skeleton.node.scale = (this.stronger ? 0.65 : 0.327) * this.heroScale;
                     }
                 }
             });
@@ -391,7 +396,14 @@ export default class Player extends cc.Component implements FizzCollideInterface
         let avatar = this.skeleton.node;
         avatar.y = - 60;
         this.body.setShape(this.normalSize.width, this.normalSize.height, 0.5, 0)
-        this.fsm.changeState(State.Scaling, 0.327);
+        // 이미 Scaling 중이면 changeState 가 무시돼 이전 목표 배율이 남는다(setDoubleSize 와 같은 처리)
+        if (this.fsm.isInState(State.Scaling)) {
+            let state = this.fsm.getState(State.Scaling)
+            //@ts-ignore
+            state._scale = 0.327 * this.heroScale
+        } else {
+            this.fsm.changeState(State.Scaling, 0.327 * this.heroScale);
+        }
         this.stronger = false;
         this.unschedule(this.shake)
     }
@@ -404,9 +416,9 @@ export default class Player extends cc.Component implements FizzCollideInterface
         if (this.fsm.isInState(State.Scaling)) {
             let state = this.fsm.getState(State.Scaling)
             //@ts-ignore
-            state._scale = 0.65
+            state._scale = 0.65 * this.heroScale
         } else {
-            this.fsm.changeState(State.Scaling,  0.65)
+            this.fsm.changeState(State.Scaling,  0.65 * this.heroScale)
         }
         this.schedule(this.shake, 0.5)
     }
