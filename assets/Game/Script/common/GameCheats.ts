@@ -229,7 +229,23 @@ export default class GameCheats {
                 pdata.save('freeDiamondCount');
                 pdata.save('freeDiamondDate');
                 Toast.make('일일 다이아 광고 횟수 리셋');
-            }, '무료 다이아 광고 횟수 리셋']
+            }, '무료 다이아 광고 횟수 리셋'],
+
+            '🗑 데이터 초기화': [() => {
+                if (!window.confirm('모든 저장 데이터(재화·레벨·영웅·펫·튜토리얼)를 지우고 처음부터 시작합니다. 계속할까요?')) return;
+                // 카카오 쿠키 백업(kcb)이 부팅 때 쿠키에서 localStorage 를 되살리므로 clear() 가 아니라
+                // removeItem 으로 하나씩 지운다(후킹된 removeItem 이 백업 쿠키도 같이 지움).
+                const keys = new Set<string>();
+                for (let i = 0; i < localStorage.length; i++) keys.add(localStorage.key(i) as string);
+                const kcb = (window as any).__kakaoCookieBackup;
+                try { if (kcb && kcb.dump) Object.keys(kcb.dump()).forEach(k => keys.add(k)); } catch (e) { }
+                keys.delete('cheat-tab-mode');
+                keys.forEach(k => { try { localStorage.removeItem(k); } catch (e) { } });
+                // 새로고침 전 게임이 메모리 데이터를 다시 저장하지 못하게 막는다
+                Storage.prototype.setItem = function () { };
+                Toast.make('데이터 초기화 완료 — 다시 시작합니다');
+                setTimeout(() => location.reload(), 300);
+            }, '저장 데이터 전부 삭제 후 재시작(쿠키 백업 포함)']
         });
     }
 
