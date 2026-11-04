@@ -36,6 +36,7 @@ import NoobLevel from "./behaviors/NoobLevel";
 import GameLayerTop from "./views/GameLayerTop";
 import { LocalizationManager } from "../../../framework/Hi5/Localization/LocalizationManager";
 import Hi5 from "../../../framework/Hi5/Hi5";
+import { keepInKakaoSafeArea } from "../../../framework/Hi5/KakaoSafeUI";
 
 // Hi5 플랫폼 여부 확인
 const isHi5Platform = () => {
@@ -251,6 +252,9 @@ export default class Game extends mvcView implements ITileObjectFactory {
 
     start() {
         pdata.enterGame();
+        // 카카오 가로모드 가이드: 좌우 하단 조작 버튼을 Safe Area 안쪽으로 (점프·스킬은 오른쪽 한 묶음)
+        keepInKakaoSafeArea(cc.find('Canvas/uilayer/operation/slide_btn'));
+        keepInKakaoSafeArea([cc.find('Canvas/uilayer/operation/jump_btn'), cc.find('Canvas/uilayer/operation/btn_skill')]);
 
         this.loadMap();
     }

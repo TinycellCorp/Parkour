@@ -16,6 +16,7 @@ import { guider } from "./Guide";
 import PlayerData from "./model/PlayerData";
 import { heroSpinePaths } from "../common/HeroSpinePaths";
 import GameCheats from "../common/GameCheats";
+import { keepInKakaoSafeArea } from "../../../framework/Hi5/KakaoSafeUI";
 
 const { ccclass, property } = cc._decorator;
 
@@ -121,6 +122,10 @@ export default class Home extends mvcView {
 
     start() {
         this.render();
+        // 카카오 가로모드 가이드: 가장자리 버튼을 Safe Area 안쪽·GNB 밖으로 (나란한 버튼은 한 묶음)
+        keepInKakaoSafeArea(cc.find('Btn/menu', this.node));
+        keepInKakaoSafeArea([cc.find('Btn/btn_breakthrough', this.node), cc.find('Btn/btn_parkour', this.node)]);
+        keepInKakaoSafeArea(cc.find('UITop', this.node));
         guider.enterHome();
         // 치트 시스템 초기화
         GameCheats.init();

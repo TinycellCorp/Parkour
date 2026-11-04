@@ -447,8 +447,33 @@ try {
     if (typeof window !== "undefined" && isKakao()) _reparentSdkOverlays();
 } catch (e) {}
 
+// 카카오 가로모드 가이드(0929) — Safe Area·GNB 영역 (hi5-sdk 1.14.0 KakaoAdapter). 어댑터 생성 전이면 0/null.
+//   이 프로젝트는 async init(레지스트리)을 쓰지 않고 어댑터를 직접 만들므로 async 의 getSafeArea 는 쓸 수 없다.
+function getSafeArea() {
+    try { return (_adapter && _adapter.getSafeArea) ? _adapter.getSafeArea() : { top: 0, bottom: 0, left: 0, right: 0 }; }
+    catch (e) { return { top: 0, bottom: 0, left: 0, right: 0 }; }
+}
+function getNavRect() {
+    try { return (_adapter && _adapter.getNavRect) ? _adapter.getNavRect() : null; } catch (e) { return null; }
+}
+var _saListeners = [], _saHooked = null;
+function onSafeAreaChange(cb) {
+    _saListeners.push(cb);
+    // 어댑터가 늦게 생기므로 생긴 뒤에 한 번만 연결
+    (function tryHook() {
+        if (_saHooked) return;
+        if (_adapter && _adapter.onSafeAreaChange) {
+            _saHooked = _adapter.onSafeAreaChange(function (v) { _saListeners.slice().forEach(function (l) { try { l(v); } catch (e) {} }); });
+        } else setTimeout(tryHook, 500);
+    })();
+    return function () { _saListeners = _saListeners.filter(function (l) { return l !== cb; }); };
+}
+
 module.exports = {
     isKakao: isKakao,
+    getSafeArea: getSafeArea,
+    getNavRect: getNavRect,
+    onSafeAreaChange: onSafeAreaChange,
     isConfigured: isConfigured,
     ensureInit: ensureInit,
     getRankings: getRankings,
