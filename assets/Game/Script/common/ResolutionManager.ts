@@ -43,6 +43,35 @@ export default class ResolutionManager {
             console.log('[ResolutionManager] 해상도 변경:', this._resolutionInfo);
             cc.director.emit('resolution:changed', this._resolutionInfo);
         });
+        this.startRotateWatchdog();
+    }
+
+    /**
+     * 회전 감시 — 가로 전용 게임이라 세로 화면에선 엔진이 화면을 90° 돌려 그린다.
+     * 실기기(아이패드 카카오톡)에서 회전 이벤트가 창 크기 갱신보다 먼저 오면 엔진이 이전 크기로 굳어
+     * 화면이 반쯤 잘려 보였다(릴레이 #133-33). 이벤트 순서에 기대지 않고 0.5초마다 창 크기와 엔진 프레임을
+     * 비교해, 창 크기가 바뀐 뒤 어긋나 있을 때만(창 크기 변화당 최대 6회) 다시 맞춘다.
+     */
+    private static _watchdog: any = null;
+    private static startRotateWatchdog(): void {
+        if (this._watchdog || typeof window === 'undefined') return;
+        let lastKey = '', retries = 0;
+        this._watchdog = setInterval(() => {
+            try {
+                const W = window.innerWidth, H = window.innerHeight;
+                if (!W || !H) return;
+                const key = W + 'x' + H;
+                if (key !== lastKey) { lastKey = key; retries = 6; }
+                if (retries <= 0) return;
+                const f = cc.view.getFrameSize();
+                const rotated = W < H; // 세로 화면 → 엔진이 돌려 그림, 프레임은 가로·세로가 바뀐 값
+                const ew = rotated ? H : W, eh = rotated ? W : H;
+                if (Math.abs(f.width - ew) <= 2 && Math.abs(f.height - eh) <= 2) { retries = 0; return; }
+                retries--;
+                const v: any = cc.view;
+                if (typeof v._resizeEvent === 'function') v._resizeEvent(true);
+            } catch (e) { /* noop */ }
+        }, 500);
     }
 
     /**
