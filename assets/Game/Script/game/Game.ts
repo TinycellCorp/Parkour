@@ -132,23 +132,30 @@ export default class Game extends mvcView implements ITileObjectFactory {
         // this.setupObstacleLayerClipping();
     }
 
-    /** 화면비에 따라 Canvas 정책을 FIXED_HEIGHT(가로 넓음)/FIXED_WIDTH(세로 넓음)로 적응 → 레터박스 제거. */
+    /**
+     * 인게임은 화면비와 무관하게 높이 고정(FIXED_HEIGHT) — 맵·배경이 디자인 높이(640)로 만들어져 있어서다.
+     * 디자인(1136x640)보다 덜 넓은 화면(아이패드 1.44 등)을 너비 고정으로 두면 세로가 789까지 보여
+     * 맵은 화면 맨 아래, 배경은 가운데 기준이라 둘이 어긋나고, 맨 위는 배경이 모자라 검은 띠,
+     * 상단 UI(TOP)는 디자인 위치에 남아 아래로 떠 보였다(릴레이 #133-34).
+     * 덜 넓은 화면에선 좌우가 좁아지므로 상단 UI 가로 위치와 팝업(ViewManager)만 화면 폭에 맞춰 줄인다.
+     */
+    private _hudBaseX: { node: cc.Node, x: number }[] = null;
     private _applyAdaptiveResolution() {
         const canvas = cc.Canvas.instance;
         if (!canvas) return;
+        canvas.fitHeight = true;
+        canvas.fitWidth = false;
+
         const design = canvas.designResolution;
-        const designRatio = design.width / design.height;
-        const frame = cc.view.getFrameSize();
-        const screenRatio = frame.width / frame.height;
-        if (screenRatio >= designRatio) {
-            // 가로로 넓음 → 높이 고정, 가로 확장(좌우 더 보임, 검은띠 없음)
-            canvas.fitHeight = true;
-            canvas.fitWidth = false;
-        } else {
-            // 세로로 김 → 너비 고정, 세로 확장
-            canvas.fitWidth = true;
-            canvas.fitHeight = false;
+        const vs = cc.view.getVisibleSize();
+        const kx = Math.min(1, vs.width / design.width);
+        const top = cc.find('uilayer/TOP', this.node);
+        if (top) {
+            if (!this._hudBaseX) this._hudBaseX = top.children.map(n => ({ node: n, x: n.x }));
+            this._hudBaseX.forEach(h => { if (h.node.isValid) h.node.x = h.x * kx; });
         }
+        const vm = cc.find('ViewManager', this.node);
+        if (vm) vm.scale = kx;
     }
 
     /**
