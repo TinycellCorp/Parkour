@@ -724,5 +724,19 @@
         })();
     </script>
 
+<!-- QA 전용 회전 진단(릴레이 #133-52): qa-/dev- 호스트에서 좌상단 60px 를 3초 안에 5번 터치하면 화면 크기·엔진 회전 상태 표시 -->
+<script>
+(function(){if(!/^(qa-|dev-)/.test(location.hostname))return;var n=0,t0=0,on=false;
+document.addEventListener('touchstart',function(e){var p=e.touches&&e.touches[0];if(!p||p.clientX>60||p.clientY>60)return;var t=Date.now();if(t-t0>3000){n=0;t0=t;}if(++n>=5){n=0;on=!on;d.style.display=on?'block':'none';if(on)r();}},true);var d=document.createElement('pre');d.style.cssText='position:fixed;left:0;bottom:0;z-index:999999;background:rgba(0,0,0,.75);color:#0f0;font:12px monospace;margin:0;padding:4px;pointer-events:none;white-space:pre-wrap;max-width:100vw;display:none';
+function r(){try{if(!d.parentNode&&document.body)document.body.appendChild(d);var g=document.getElementById('GameDiv'),c=document.getElementById('Cocos2dGameContainer'),cv=document.getElementById('GameCanvas');var v=window.cc&&cc.view,f=v&&v.getFrameSize();
+d.textContent=['inner '+innerWidth+'x'+innerHeight+' scr '+screen.width+'x'+screen.height+' or '+(screen.orientation&&screen.orientation.type)+' wo '+window.orientation,
+'GameDiv '+(g&&g.clientWidth+'x'+g.clientHeight)+' style '+(g&&g.getAttribute('style')),
+'cont '+(c&&c.clientWidth+'x'+c.clientHeight)+' style '+(c&&c.getAttribute('style')),
+'canvas '+(cv&&cv.width+'x'+cv.height+' css '+cv.style.width+'x'+cv.style.height),
+'frame '+(f&&f.width+'x'+f.height)+' rot '+(v&&v._isRotated)+' ori '+(v&&v._orientation)+' mob '+(window.cc&&cc.sys.isMobile)+' gframe '+(window.cc&&cc.game.frame&&cc.game.frame.id),
+'body '+document.body.clientWidth+'x'+document.body.clientHeight+' html '+document.documentElement.clientWidth+'x'+document.documentElement.clientHeight].join('
+');}catch(e){d.textContent='err '+e;}}
+setInterval(function(){if(on)r();},500);})();
+</script>
 </body>
 </html>

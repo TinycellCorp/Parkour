@@ -188,6 +188,10 @@ export default class UIEndPage extends mvcView {
         // 자랑하기: 카카오 환경 + "무한모드"에서만 노출 (일반 스테이지 모드 제외). 리더보드 점수와 동일 조건.
         if (this.btnShare) {
             this.btnShare.active = b && this.shareAvailable && (pdata.gameMode == ParkourType.Infinite);
+            if (!b && this.shareAvailable && pdata.gameMode == ParkourType.Infinite) {
+                // 결과 연출 동안 상위 % 를 미리 받아 둔다(클릭 시 조회하면 공유 창이 막힘)
+                try { require("../../../framework/Hi5/business/kakaoSdk").prefetchShareTopPercent(); } catch (e) { }
+            }
         }
     }
 

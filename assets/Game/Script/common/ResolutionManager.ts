@@ -47,31 +47,50 @@ export default class ResolutionManager {
     }
 
     /**
-     * 회전 감시 — 가로 전용 게임이라 세로 화면에선 엔진이 화면을 90° 돌려 그린다.
-     * 실기기(아이패드 카카오톡)에서 회전 이벤트가 창 크기 갱신보다 먼저 오면 엔진이 이전 크기로 굳어
-     * 화면이 반쯤 잘려 보였다(릴레이 #133-33). 이벤트 순서에 기대지 않고 0.5초마다 창 크기와 엔진 프레임을
-     * 비교해, 창 크기가 바뀐 뒤 어긋나 있을 때만(창 크기 변화당 최대 6회) 다시 맞춘다.
+     * 세로 회전 시 화면 반 잘림(릴레이 #133-33·52) — 원인: CC 2.4 엔진은 Android 에서 화면을 맞출 때
+     * document.body 에 그때 크기를 px 로 박아 둔다(ContainerStrategy._setupStyle). 게임 틀(GameDiv)은
+     * body 를 100% 로 따라가므로, 회전 후 엔진이 틀 크기를 다시 재도 이전(가로) 크기가 나와
+     * "아직 가로"로 판단 → 회전 안 함 + 가로 크기 그대로 위쪽에 반만 보였다(에뮬레이터 카카오톡·PC 재현).
+     * → 엔진이 크기를 재기 직전에 body 고정값을 풀어 실제 창 크기를 재게 한다.
+     * 회전 이벤트가 창 크기 갱신보다 먼저 오는 기기 대비로, 창 크기가 바뀐 뒤 어긋나 있으면
+     * 0.25초 간격으로 최대 12회 다시 맞춘다(자리 잡으면 호출 0회).
      */
     private static _watchdog: any = null;
     private static startRotateWatchdog(): void {
         if (this._watchdog || typeof window === 'undefined') return;
+        const v: any = cc.view;
+        if (typeof v._resizeEvent === 'function' && !v.__bodyUnlockPatched) {
+            const orig = v._resizeEvent;
+            v._resizeEvent = function (forceOrEvent: any) {
+                try {
+                    if (cc.sys.os === cc.sys.OS_ANDROID && document.body) {
+                        document.body.style.width = '';
+                        document.body.style.height = '';
+                    }
+                } catch (e) { /* noop */ }
+                return orig.call(this, forceOrEvent);
+            };
+            v.__bodyUnlockPatched = true;
+            // 엔진은 resize/orientationchange 리스너에 원본 함수를 이미 걸어 두었으므로 패치본으로 한 번 더 건다
+            window.addEventListener('resize', () => v._resizeEvent());
+            window.addEventListener('orientationchange', () => setTimeout(() => v._resizeEvent(true), 100));
+        }
         let lastKey = '', retries = 0;
         this._watchdog = setInterval(() => {
             try {
                 const W = window.innerWidth, H = window.innerHeight;
                 if (!W || !H) return;
                 const key = W + 'x' + H;
-                if (key !== lastKey) { lastKey = key; retries = 6; }
+                if (key !== lastKey) { lastKey = key; retries = 12; }
                 if (retries <= 0) return;
                 const f = cc.view.getFrameSize();
-                const rotated = W < H; // 세로 화면 → 엔진이 돌려 그림, 프레임은 가로·세로가 바뀐 값
+                const rotated = cc.sys.isMobile && W < H; // 세로 화면 → 엔진이 돌려 그림, 프레임은 가로·세로가 바뀐 값
                 const ew = rotated ? H : W, eh = rotated ? W : H;
-                if (Math.abs(f.width - ew) <= 2 && Math.abs(f.height - eh) <= 2) { retries = 0; return; }
+                if (!!v._isRotated === rotated && Math.abs(f.width - ew) <= 2 && Math.abs(f.height - eh) <= 2) { retries = 0; return; }
                 retries--;
-                const v: any = cc.view;
-                if (typeof v._resizeEvent === 'function') v._resizeEvent(true);
+                v._resizeEvent(true);
             } catch (e) { /* noop */ }
-        }, 500);
+        }, 250);
     }
 
     /**

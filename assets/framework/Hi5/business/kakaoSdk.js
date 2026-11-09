@@ -370,20 +370,51 @@ function showToastPreset(preset, options) {
     } catch (e) { console.warn("[KakaoSDK] showToastPreset 예외:", e); }
 }
 
+var _shareTopPercent = null;
+
+/**
+ * 자랑하기용 상위 % 를 결과창이 뜰 때 미리 받아 둔다(랭킹 네트워크 2회).
+ * 클릭 시점에 조회하면 그 대기가 클릭 제스처를 끊어 카카오 공유 창이 막힌다.
+ */
+function prefetchShareTopPercent() {
+    _shareTopPercent = null;
+    if (!_ready || !_adapter || typeof _adapter.getTopPercent !== "function") return;
+    try {
+        _adapter.getTopPercent({}).then(function (p) { _shareTopPercent = p; }).catch(function () {});
+    } catch (e) {}
+}
+
 /**
  * 카카오 템플릿 공유(자랑하기). templateCode 미지정 시 어댑터 기본('showoff01').
+ * 울3D(자랑하기 정상 확인)와 같은 경로: ensureInit().then 비동기 홉 없이 클릭 콜스택에서
+ * adapter.shareTemplate 를 바로 호출하고, withTopPercent:false 로 공유 직전 랭킹 조회를 건너뛴다
+ * (topPercent 는 prefetchShareTopPercent 캐시만). 실패하면 토스트로 알린다(기존엔 콘솔만 남았다).
  * @param {string} templateCode 예: 'showoff01'
- * @param {object} [templateArgs] 템플릿 동적 인자 (예: { stage: 12 })
+ * @param {object} [templateArgs] 템플릿 동적 인자 (예: { score: 12 })
  * @returns {Promise<{success:boolean, error?:string}>}
  */
 function shareTemplate(templateCode, templateArgs) {
-    return ensureInit().then(function (ok) {
-        if (!ok || !_adapter || typeof _adapter.shareTemplate !== "function") {
-            return { success: false, error: "not-ready" };
-        }
-        return _adapter.shareTemplate({ templateCode: templateCode, templateArgs: templateArgs })
-            .then(function (res) { return res || { success: false }; })
-            .catch(function (e) { console.warn("[KakaoSDK] shareTemplate 예외:", e); return { success: false, error: String(e) }; });
+    var failMsg = "공유하지 못했어요. 잠시 후 다시 시도해주세요";
+    if (!_ready || !_adapter || typeof _adapter.shareTemplate !== "function") {
+        showToast(failMsg);
+        return Promise.resolve({ success: false, error: "not-ready" });
+    }
+    var args = {};
+    for (var k in (templateArgs || {})) args[k] = templateArgs[k];
+    if (_shareTopPercent !== null && _shareTopPercent !== undefined && args.topPercent === undefined) args.topPercent = _shareTopPercent;
+    var p;
+    try {
+        p = _adapter.shareTemplate({ templateCode: templateCode, templateArgs: args, withTopPercent: false });
+    } catch (e) {
+        p = Promise.reject(e);
+    }
+    return p.then(function (res) {
+        if (!(res && res.success !== false)) showToast(failMsg);
+        return res || { success: false };
+    }).catch(function (e) {
+        console.warn("[KakaoSDK] shareTemplate 예외:", e);
+        showToast(failMsg);
+        return { success: false, error: String(e) };
     });
 }
 
@@ -485,6 +516,7 @@ module.exports = {
     gameEnd: gameEnd,
     exitPlay: exitPlay,
     shareTemplate: shareTemplate,
+    prefetchShareTopPercent: prefetchShareTopPercent,
     showToast: showToast,
     showToastPreset: showToastPreset,
     TOAST_MESSAGES: (sdk && sdk.KAKAO_TOAST_MESSAGES) || null,
